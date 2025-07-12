@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: taste-trip
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python run.py"
+    autoDeploy: true
+    branch: main
+    envVars:
+      - key: QLOO_API_KEY
+        sync: false
+      - key: TOGETHER_API_KEY
+        sync: false
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+      - key: GEOAPIFY_API_KEY
+        sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false
