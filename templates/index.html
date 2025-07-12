@@ -1,0 +1,115 @@
+<!-- templates/index.html -->
+{% extends 'layout.html' %}
+{% block title %}TasteTrip — Plan Your Cultural Journey{% endblock %}
+{% block content %}
+<section class="form-section">
+    <h2>Enter your cultural taste</h2>
+    <form action="{{ url_for('main.itinerary') }}" method="POST">
+        <label for="departure_city">Departure City:</label>
+        <input type="text" name="departure_city" id="departure_city" placeholder="e.g. Nairobi" required>
+
+        <label for="start_date">Start Date:</label>
+        <input type="date" name="start_date" id="start_date" required>
+
+        <label for="end_date">End Date:</label>
+        <input type="date" name="end_date" id="end_date" required>
+
+        <div class="info-box" style="margin:10px 0 18px 0;padding:10px;background:#eef4fa;border-left:4px solid #667eea;color:#223;">
+            <strong>Note:</strong> Weather forecast is only available for trips starting within the next 7 days.
+        </div>
+        <div id="date-warning" style="display:none;margin:0 0 18px 0;padding:10px;background:#fff3cd;border-left:4px solid #ffa502;color:#856404;"></div>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('form');
+            const startDate = document.getElementById('start_date');
+            const warning = document.getElementById('date-warning');
+            form.addEventListener('submit', function(e) {
+                const today = new Date();
+                const start = new Date(startDate.value);
+                const diff = (start - today) / (1000*60*60*24);
+                if (diff > 7) {
+                    warning.style.display = 'block';
+                    warning.textContent = 'Weather forecast will not be available for your selected dates. Please choose a start date within the next 7 days for weather info.';
+                    e.preventDefault();
+                } else {
+                    warning.style.display = 'none';
+                }
+            });
+        });
+        </script>
+
+        <div id="text-input">
+            <label for="trip_description">Describe Your Ideal Trip:</label>
+            <textarea name="trip_description" id="trip_description" rows="8" placeholder="Describe your music, food, film, art tastes, favorite activities, travel vibe, and anything else important for your perfect trip..." required></textarea>
+        <div class="info-box" style="margin:15px 0;padding:15px;background:#f0f9ff;border-left:4px solid #0ea5e9;color:#0c4a6e;">
+            <strong>💡 Tips for better recommendations:</strong><br>
+            • Describe your favorite <em>music, movies, cuisine</em>, or <em>art styles</em><br>
+            • Include activities you enjoy, like <em>bookstores, beaches, markets, or museums</em><br>
+            • Share your <em>preferred accommodation type</em> (e.g. boutique, hostel, hotel)<br>
+            • Describe your travel vibe — <em>luxury, backpacker, cultural explorer, chill, etc.</em>
+        </div>
+
+
+        
+        <input type="hidden" name="input_type" value="text">
+        
+        <button id="generate-btn" type="submit">Generate My Itinerary</button>
+        <div id="loading-overlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(255,255,255,0.85);z-index:9999;justify-content:center;align-items:center;flex-direction:column;">
+            <span class="spinner" style="display:block;width:48px;height:48px;border:6px solid #e0e7ef;border-top:6px solid #2563eb;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:24px;"></span>
+            <div style="font-size:1.3rem;font-weight:600;color:#2563eb;text-align:center;">Your Itinerary is being Generated...</div>
+        </div>
+        <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        </style>
+        <script>
+        function resetLoadingOverlay() {
+            const overlay = document.getElementById('loading-overlay');
+            const btn = document.getElementById('generate-btn');
+            if (overlay) overlay.style.display = 'none';
+            if (btn) btn.disabled = false;
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            resetLoadingOverlay();
+            const form = document.querySelector('form');
+            const btn = document.getElementById('generate-btn');
+            const overlay = document.getElementById('loading-overlay');
+            form.addEventListener('submit', function(e) {
+                btn.disabled = true;
+                overlay.style.display = 'flex';
+                // Artificial delay to ensure spinner is visible
+                setTimeout(function() {
+                    form.submit();
+                }, 1000);
+                e.preventDefault();
+            });
+        });
+        // Reset overlay and button on browser navigation (bfcache/back/forward)
+        window.addEventListener('pageshow', function(event) {
+            // Only reset if coming from bfcache (back/forward navigation)
+            if (event.persisted) {
+                resetLoadingOverlay();
+            }
+        });
+        </script>
+        <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .spinner {
+            box-shadow: 0 0 8px #c7d2fe, 0 0 0 0 #fff;
+            background: linear-gradient(135deg, #e0e7ef 40%, #2563eb 100%);
+            opacity: 0.85;
+            transition: box-shadow 0.3s;
+        }
+        #loading-overlay {
+            backdrop-filter: blur(2px);
+        }
+        </style>
+    </form>
+</section>
+{% endblock %}
+

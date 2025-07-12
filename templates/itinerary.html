@@ -1,0 +1,432 @@
+{% extends 'layout.html' %}
+
+{% block title %}Your Personalized Itinerary{% endblock %}
+
+{% block content %}
+<section class="itinerary-section">
+    <hr class="section-separator">
+
+    {% if image %}
+    <div class="hero-image-wrapper">
+        <img src="{{ image }}" alt="Main photo of {{ city_info.name }}" class="hero-image">
+    </div>
+    {% endif %}
+    <h2>Your Trip to {{ city_info.name }}</h2>
+
+    <section id="about" class="section-block">
+        {% if city_info.description %}
+            <p><strong>About {{ city_info.name }}:</strong> {{ city_info.description }}</p>
+        {% endif %}
+        {% if reason %}
+            <div class="qloo-recommendation">
+                <div class="qloo-branding">
+                    <span class="qloo-logo">🎯</span>
+                    <strong>Powered by Qloo's Taste AI™</strong>
+                </div>
+                <blockquote class="city-reason">
+                    <strong>Why {{ city_info.name }}?</strong><br>
+                    {{ reason | replace('\n', '<br>') | safe }}
+                </blockquote>
+                
+                {% if taste_mapping %}
+                <div class="taste-mapping-organized">
+                    <h4>🧠 Cultural Preferences</h4>
+                    
+                    {% if taste_mapping.preferences %}
+                    <div class="preferences-summary">
+                        <p>🎵 <strong>Music:</strong> {{ taste_mapping.preferences.music }}</p>
+                        <p>🎬 <strong>Film:</strong> {{ taste_mapping.preferences.film }}</p>
+                        <p>🍽️ <strong>Cuisine:</strong> {{ taste_mapping.preferences.cuisine }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if taste_mapping.music_experiences %}
+                    <div class="experience-section">
+                        <h5>🎵 Music-Inspired Experiences</h5>
+                        <p><em>Inspired by your love for {{ taste_mapping.preferences.music }}, these places reflect musical culture:</em></p>
+                        <table class="experience-table">
+                            <thead><tr><th>Experience</th><th>Cultural Path</th></tr></thead>
+                            <tbody>
+                                {% for exp in taste_mapping.music_experiences %}
+                                <tr><td>{{ exp.venue }}</td><td>{{ exp.cultural_path }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                    
+                    {% if taste_mapping.film_experiences %}
+                    <div class="experience-section">
+                        <h5>🎬 Film-Inspired Experiences</h5>
+                        <p><em>Your love for {{ taste_mapping.preferences.film }} connects you to visually rich environments:</em></p>
+                        <table class="experience-table">
+                            <thead><tr><th>Experience</th><th>Cultural Path</th></tr></thead>
+                            <tbody>
+                                {% for exp in taste_mapping.film_experiences %}
+                                <tr><td>{{ exp.venue }}</td><td>{{ exp.cultural_path }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                    
+                    {% if taste_mapping.cuisine_experiences %}
+                    <div class="experience-section">
+                        <h5>🍽️ Cuisine-Inspired Experiences</h5>
+                        <p><em>{{ taste_mapping.preferences.cuisine }}'s essence maps to local culinary culture:</em></p>
+                        <table class="experience-table">
+                            <thead><tr><th>Experience</th><th>Cultural Path</th></tr></thead>
+                            <tbody>
+                                {% for exp in taste_mapping.cuisine_experiences %}
+                                <tr><td>{{ exp.venue }}</td><td>{{ exp.cultural_path }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                    
+                    {% if taste_mapping.additional_spots %}
+                    <div class="experience-section">
+                        <h5>📍 Additional Interest Spots</h5>
+                        <p><em>Cultural landmarks and local gems that complement your trip:</em></p>
+                        <table class="experience-table">
+                            <thead><tr><th>Experience</th><th>Cultural Path</th></tr></thead>
+                            <tbody>
+                                {% for spot in taste_mapping.additional_spots %}
+                                <tr><td>{{ spot.venue }}</td><td>{{ spot.cultural_path }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                <div class="qloo-footer">
+                    <small><em>This recommendation uses Qloo's advanced cultural intelligence to match destinations with your unique taste profile.</em></small>
+                </div>
+            </div>
+        {% endif %}
+        <div class="taste-summary">
+            <p><strong>Your Taste Summary:</strong><br>{{ summary }}</p>
+        </div>
+    </section>
+    <hr class="section-separator">
+
+    <section id="weather" class="section-block">
+        <h3>Weather Forecast</h3>
+        {% if weather and weather|length > 0 %}<p><strong>Forecast:</strong> {{ weather|length }} days available</p>{% endif %}
+        {% if weather and weather|length > 0 %}
+            <table class="weather-table">
+                <thead>
+                    <tr><th>Date</th><th>Condition</th><th>Temp (&deg;C)</th></tr>
+                </thead>
+                <tbody>
+                    {% for day in weather %}
+                        <tr>
+                            <td>{{ day.date }}</td>
+                            <td>{{ day.desc }}</td>
+                            <td>{{ day.temp }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p><em>Weather forecast unavailable. Please check closer to your travel date.</em></p>
+        {% endif %}
+
+
+
+    {% if not weather or weather|length == 0 %}
+        <div class="info-box" style="margin-bottom:10px;padding:10px;background:#fff3cd;border-left:4px solid #ffa502;color:#856404;">
+            <strong>Notice:</strong> Weather forecast is only available for trips starting within the next 7 days.
+        </div>
+    {% endif %}
+
+    </section>
+    {% if places %}
+    <section id="places" class="section-block">
+        <h3>Recommended Places to Visit in {{ city_info.name }}:</h3>
+        <ul class="recommended-places">
+            {% for i in range(places|length) %}
+                {% set place = places[i] %}
+                {% set link = maps_links[i] %}
+                <li>📍 {{ place }}
+                    <a href="{{ link }}" target="_blank" title="View {{ place }} on Google Maps">🗺️</a>
+                    <a href="#" class="qr-link" data-qr="/qr?data={{ link | urlencode }}" title="Show QR code for this place">
+                        <svg class="qr-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><rect width="4" height="4" x="2" y="2" rx="1.2"/><rect width="4" height="4" x="14" y="2" rx="1.2"/><rect width="4" height="4" x="2" y="14" rx="1.2"/><rect width="2" height="2" x="9" y="2" rx="1"/><rect width="2" height="2" x="2" y="9" rx="1"/><rect width="2" height="2" x="16" y="9" rx="1"/><rect width="2" height="2" x="9" y="16" rx="1"/><rect width="4" height="4" x="14" y="14" rx="1.2"/><rect width="2" height="2" x="16" y="16" rx="1"/></svg>
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+    </section>
+    <hr class="section-separator">
+
+    <section id="packing" class="section-block">
+        <h3>Packing Checklist</h3>
+        {% if packing_list %}
+            {% if packing_list is mapping %}
+                {% for category, items in packing_list.items() %}
+                    <div class="packing-category">
+                        <strong>{{ category|capitalize }}</strong>
+                        <ul class="packing-list">
+                            {% for item in items %}
+                                <li>{{ item|replace('AI', '')|replace('ai', '')|trim }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endfor %}
+            {% elif packing_list is iterable %}
+                <ul class="packing-list">
+                    {% for item in packing_list %}
+                        <li>{{ item|replace('AI', '')|replace('ai', '')|trim }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="packing-list-error">Could not display packing list.</div>
+            {% endif %}
+        {% else %}
+            <div class="packing-list-error">No packing list available.</div>
+        {% endif %}
+    </section>
+
+    <hr class="section-separator">
+    <section id="essentials" class="section-block">
+        <h3>Travel Essentials</h3>
+        <div class="essentials-flex">
+            <div class="essentials-column">
+                <h4>Tips</h4>
+                {% if tips %}
+                    {% if tips is iterable and tips is not string %}
+                        <ul class="tips-list">
+                            {% for tip in tips %}
+                                <li>{{ tip|replace('AI', '')|replace('ai', '')|replace('**', '')|trim }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="tips-list-single">{{ tips|replace('AI', '')|replace('ai', '')|replace('**', '')|trim }}</div>
+                    {% endif %}
+                {% else %}
+                    <div class="tips-list-error">No tips available.</div>
+                {% endif %}
+            </div>
+            <div class="essentials-column">
+                <h4>Transport Options</h4>
+                {% if transport %}
+                    <ul class="transport-list">
+                    {% if transport is iterable and transport is not string %}
+                        {% for option in transport %}
+                            <li>{{ option|replace('AI', '')|replace('ai', '')|replace('**', '')|trim }}</li>
+                        {% endfor %}
+                    {% else %}
+                        <li>{{ transport|replace('AI', '')|replace('ai', '')|replace('**', '')|trim }}</li>
+                    {% endif %}
+                    </ul>
+                {% else %}
+                    <div class="transport-list-error">No transport info available.</div>
+                {% endif %}
+            </div>
+            <div class="essentials-column">
+                <h4>Safety & Accessibility Tags</h4>
+                {% if tags %}
+                    <ul class="safety-list">
+                        {% for tag in tags %}
+                            <li class="safety-tag">{{ tag|replace('AI', '')|replace('ai', '')|replace('**', '')|trim }}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="safety-list-error">No safety info available.</div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+    <hr class="section-separator">
+
+    <hr class="section-separator">
+    <!-- Budget Estimates Section -->
+    <!-- Budget Estimates Section -->
+    <hr class="section-separator">
+    <section id="budget" class="section-block">
+        <h3>Budget Estimates</h3>
+        <table class="budget-table">
+            <thead><tr><th>Category</th><th>Accommodation</th><th>Food</th><th>Activities</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>Daily</td>
+                    <td>
+                        {% if budget and budget.accommodation %}
+                            {% if budget.accommodation is mapping %}
+                                {% for k, v in budget.accommodation.items() %}
+                                    <div>{{ k|capitalize }}: {{ v }}</div>
+                                {% endfor %}
+                            {% else %}
+                                {{ budget.accommodation }}
+                            {% endif %}
+                        {% else %}
+                            Not available
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if budget and budget.food %}
+                            {{ budget.food }}
+                        {% else %}
+                            Not available
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if budget and budget.activities %}
+                            {{ budget.activities }}
+                        {% else %}
+                            Not available
+                        {% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+    
+    <hr class="section-separator">
+    <!-- Flight Estimates Section -->
+    <section id="flight" class="section-block">
+        <h3>✈️ Flight Estimates</h3>
+        <div class="flight-info">
+            <div id="flight-estimate">Loading flight estimate...</div>
+        </div>
+    </section>
+    
+    <script>
+    // Get flight estimate via AJAX
+    fetch('/get_flight_estimate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            departure: '{{ request.form.get("departure_city", "Nairobi") }}',
+            destination: '{{ city_info.name }}',
+            month: '{{ start_date[:7] if start_date else "" }}'
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('flight-estimate').innerHTML = `
+            <p><strong>Estimated Round-trip Cost:</strong> ${data.price}</p>
+            <p><strong>Best Booking Sites:</strong></p>
+            <ul>${data.sites.map(site => `<li>${site}</li>`).join('')}</ul>
+            <p><em>Tip: Book 2-3 months in advance for best prices.</em>`;
+        // Store flight estimate for PDF
+        document.getElementById('flight-estimate-hidden').value = JSON.stringify({price: data.price, sites: data.sites});
+    })
+    .catch(() => {
+        document.getElementById('flight-estimate').innerHTML = `
+            <p>Flight prices vary by season. Check current prices at:</p>
+            <p><strong>Book flights at skyscanner.com</strong></p>`;
+    });
+    </script>
+
+    <hr class="section-separator">
+    <!-- Itinerary Section -->
+    <section id="itinerary" class="section-block">
+        <h3>Itinerary</h3>
+
+        {% if itinerary %}
+            {% for day, schedule in itinerary.items() %}
+                <div class="itinerary-day">
+                    <h4>{{ day }}</h4>
+                    <ul class="itinerary-schedule">
+                        {% if schedule.morning %}
+                        <li><strong>Morning:</strong> {{ schedule.morning }}</li>
+                        {% endif %}
+                        {% if schedule.afternoon %}
+                        <li><strong>Afternoon:</strong> {{ schedule.afternoon }}</li>
+                        {% endif %}
+                        {% if schedule.evening %}
+                        <li><strong>Evening:</strong> {{ schedule.evening }}</li>
+                        {% endif %}
+                        {% if schedule.all_day %}
+                        <li><strong>All Day:</strong> {{ schedule.all_day }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No itinerary available.</p>
+            <div class="itinerary-list-error">No itinerary available.</div>
+        {% endif %}
+    </section> <!-- End Itinerary Section -->
+
+    <section id="download" class="section-block" style="text-align:center;">
+        <form method="post" action="/download_pdf">
+            <input type="hidden" name="itinerary" value='{{ itinerary | tojson | safe }}'>
+            <input type="hidden" name="image_url" value="{{ image }}">
+            <input type="hidden" name="city_name" value="{{ city_info.name }}">
+            <input type="hidden" name="departure_city" value="{{ request.form.get('departure_city', 'Nairobi') }}">
+            <input type="hidden" name="flight_estimate" value="" id="flight-estimate-hidden">
+            <input type="hidden" name="start_date" value="{{ start_date }}">
+            <input type="hidden" name="end_date" value="{{ end_date }}">
+            <input type="hidden" name="packing_list" value='{{ packing_list | tojson | safe }}'>
+            <input type="hidden" name="tips" value='{{ tips | tojson | safe }}'>
+            <input type="hidden" name="budget" value='{{ budget | tojson | safe }}'>
+            <input type="hidden" name="transport" value='{{ transport | tojson | safe }}'>
+            <input type="hidden" name="tags" value='{{ tags | tojson | safe }}'>
+            <input type="hidden" name="closing" value="{{ closing }}">
+            <input type="hidden" name="reason" value="{{ reason | e }}">
+            <input type="hidden" name="summary" value="{{ summary | e }}">
+            <input type="hidden" name="taste_mapping" value='{{ taste_mapping | tojson | safe }}'>
+            <input type="hidden" name="weather" value='{{ weather | tojson | safe }}'>
+            <input type="hidden" name="places" value='{{ places | tojson | safe }}'>
+            <input type="hidden" name="city_description" value="{{ city_info.description | e }}">
+            <input type="hidden" name="user_name" value="Traveler">
+            <input type="hidden" name="killer_note" value="TasteTrip is not just a travel app. It's a cultural translator — powered by Qloo's API — that turns your unique taste in music, film, and food into a real-world adventure. This {{ city_info.name }} journey was built using cultural AI, and every stop reflects what you love. It's how travel should feel: personal, intelligent, and meaningful.">
+            <input type="hidden" name="place_qr_codes" value='{{ place_qr_codes | tojson | safe }}'>
+            <button type="submit" class="download-btn">⬇ Download as PDF</button>
+        </form>
+        <div class="ai-closing-message">
+            <strong>{{ closing }}</strong>
+        </div>
+        
+        <div class="killer-final-note">
+            <h3>🌟 Your Cultural Journey Awaits</h3>
+            <p><strong>TasteTrip is not just a travel app.</strong> It's a cultural translator — powered by Qloo's API — that turns your unique taste in music, film, and food into a real-world adventure. This {{ city_info.name }} journey was built using cultural AI, and every stop reflects what you love. It's how travel should feel: personal, intelligent, and meaningful.</p>
+        </div>
+        
+        <div class="qloo-attribution">
+            <div class="qloo-branding-footer">
+                <span class="qloo-logo">🎯</span>
+                <span>Destination recommendation powered by <strong>Qloo's Taste AI™</strong></span>
+                <br><small>Advanced cultural intelligence for personalized travel experiences</small>
+            </div>
+        </div>
+        <div class="back-link-wrapper">
+            <a href="{{ url_for('main.index') }}" class="back-link">← Plan Another Trip</a>
+        </div>
+    </section>
+
+    <div id="qr-modal" class="qr-modal" tabindex="-1">
+        <div class="qr-modal-content">
+            <button class="qr-modal-close" onclick="closeQRModal()" aria-label="Close QR">&times;</button>
+            <img id="qr-modal-img" src="" alt="QR code for map link">
+            <div style="margin-top:8px;font-size:0.95em;color:#555;">Scan to open on your phone</div>
+        </div>
+    </div>
+    <script>
+    function closeQRModal() {
+        document.getElementById('qr-modal').classList.remove('active');
+        document.getElementById('qr-modal-img').src = '';
+    }
+    document.querySelectorAll('.qr-link').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            var qrUrl = this.getAttribute('data-qr');
+            var modal = document.getElementById('qr-modal');
+            var img = document.getElementById('qr-modal-img');
+            img.src = qrUrl;
+            modal.classList.add('active');
+        });
+    });
+    document.getElementById('qr-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeQRModal();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeQRModal();
+    });
+    </script>
+{% endblock %}

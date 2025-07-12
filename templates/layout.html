@@ -1,0 +1,35 @@
+<!-- templates/layout.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}TasteTrip{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <header class="site-header">
+        <a href="{{ url_for('main.index') }}">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="TasteTrip Logo" class="logo" onerror="this.style.display='none'">
+        </a>
+        <div class="header-content">
+            <h1 class="site-title">TasteTrip</h1>
+            <p class="tagline">Your cultural taste, mapped to a real-world journey.</p>
+            <div class="qloo-header-branding">
+                <span class="qloo-logo">🎯</span>
+                <strong>Powered by Qloo's Taste AI™</strong>
+                <br><small>Advanced Cultural Intelligence for Personalized Travel</small>
+            </div>
+        </div>
+        <button id="theme-toggle" class="theme-toggle">🌙</button>
+    </header>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>© 2025 TasteTrip | Built with ♥ for the Qloo LLM Hackathon</p>
+    </footer>
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+</body>
+</html>
