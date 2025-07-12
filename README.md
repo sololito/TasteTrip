@@ -1,6 +1,10 @@
-# TasteTrip: Your Personalized Travel Flow 🌍✈️
-
 # TasteTrip: AI-Powered Personalized Travel Planning 🌍✈️
+
+**Author:** SOLOMON OMONDI ODIPO  
+**Title:** IT ENGINEER  
+**Company:** SEA-TECH(K) LTD.
+
+---
 
 TasteTrip is an AI-powered travel planner that transforms your unique tastes and dreams into a beautifully organized, actionable trip plan. Simply describe your ideal trip in your own words, and TasteTrip does the rest—no dropdowns, no checkboxes, just pure inspiration.
 
@@ -10,7 +14,7 @@ TasteTrip is an AI-powered travel planner that transforms your unique tastes and
 
 1. **Clone the repository**
     ```bash
-    git clone https://github.com/yourname/taste-trip.git
+    git clone https://github.com/sololito/TasteTrip
     cd taste-trip
     ```
 2. **Set up your environment**
@@ -418,5 +422,8 @@ python app.py
 - Multi-language support
 - Collaborative trip planning
 - Mobile app development
-- Advanced personalization algorithms#   T a s t e T r i p  
- 
+- Advanced personalization algorithms
+
+---
+
+*Maintained by SOLOMON OMONDI ODIPO, IT ENGINEER, SEA-TECH(K) LTD.*
