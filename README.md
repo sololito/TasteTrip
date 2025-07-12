@@ -1,8 +1,8 @@
 # TasteTrip: AI-Powered Personalized Travel Planning 🌍✈️
 
 **Author:** SOLOMON OMONDI ODIPO  
-**Title:** IT ENGINEER  
-**Company:** SEA-TECH(K) LTD.
+**Title:** IT Engineer / Electrical & Electronic Engineering / Control & Instrumentation  
+**Location:** Mombasa, Kenya  
 
 ---
 
