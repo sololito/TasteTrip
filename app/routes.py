@@ -143,10 +143,22 @@ def itinerary():
     # Step 2: Get taste-based city recommendation (Qloo -> Together AI)
     taste_data = get_taste_recommendations(user_input)
 
-    # Step 3: Generate AI-powered itinerary and sections
-    # Step 3: Weather forecast (7 days max)
-    weather = get_weather_forecast(taste_data["city"], days=7)
-    if not weather:  # Fallback if weather API fails
+    # Step 3: Weather forecast (fetch only if journey is within 7 days from today)
+    from datetime import datetime, timedelta
+    current_date = datetime.now()
+    weather = []
+    try:
+        start = datetime.strptime(start_date, '%Y-%m-%d')
+        end = datetime.strptime(end_date, '%Y-%m-%d')
+        days_until_start = (start - current_date).days
+        trip_days = (end - start).days + 1
+        forecast_days = min(trip_days, 7)
+        # Only fetch weather if journey starts within 7 days from today
+        if 0 <= days_until_start < 7:
+            weather = get_weather_forecast(taste_data["city"], days=forecast_days)
+    except Exception:
+        weather = []
+    if not weather:
         weather = []
     # Step 4: Generate AI-powered itinerary and sections with weather
     # Ensure days parameter and venues are passed to AI generation
