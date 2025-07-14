@@ -711,7 +711,7 @@ def download_pdf():
         pdf.drawString(400, y, "Experience")
         y -= 16
         
-        # Table rows with proper text wrapping
+        # Table rows with proper text wrapping to ensure alignment
         pdf.setFont("Helvetica", 9)
         pdf.setFillColor(text_color)
         for mapping in taste_mapping[:3]:
