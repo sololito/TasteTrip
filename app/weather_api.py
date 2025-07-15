@@ -12,6 +12,7 @@ def get_weather_forecast(city_name, api_key=None, days=3):
         if resp.status_code != 200:
             return []
         data = resp.json()
+        print("[DEBUG] OpenWeatherMap raw data:", data)
         # Group by day
         forecasts = {}
         for entry in data['list']:

@@ -12,6 +12,12 @@
     </div>
     {% endif %}
     <h2>Your Trip to {{ city_info.name }}</h2>
+    {% if user_prompt %}
+    <div class="user-prompt-box" style="max-width: 700px; margin: 16px auto 0 auto; background: #f5f7fa; border-left: 4px solid #008080; padding: 12px 18px; color: #555; font-style: italic; border-radius: 6px;">
+        <span style="font-size:1.1em; color:#008080; font-weight:bold;">Your Trip Preferences:</span><br>
+        <blockquote style="margin: 0; padding-left: 12px; border-left: 2px solid #ccc;">{{ user_prompt }}</blockquote>
+    </div>
+    {% endif %}
 
     <section id="about" class="section-block">
         {% if city_info.description %}
@@ -374,10 +380,12 @@
             <input type="hidden" name="weather" value='{{ weather | tojson | safe }}'>
             <input type="hidden" name="places" value='{{ places | tojson | safe }}'>
             <input type="hidden" name="city_description" value="{{ city_info.description | e }}">
+            <input type="hidden" name="trip_description" value="{{ user_prompt | e }}">
             <input type="hidden" name="user_name" value="Traveler">
             <input type="hidden" name="killer_note" value="TasteTrip is not just a travel app. It's a cultural translator — powered by Qloo's API — that turns your unique taste in music, film, and food into a real-world adventure. This {{ city_info.name }} journey was built using cultural AI, and every stop reflects what you love. It's how travel should feel: personal, intelligent, and meaningful.">
             <input type="hidden" name="place_qr_codes" value='{{ place_qr_codes | tojson | safe }}'>
             <button type="submit" class="download-btn">⬇ Download as PDF</button>
+            <button type="button" id="capture-btn" style="margin-left:12px;">📸 Capture as Image</button> <!-- New image capture button -->
         </form>
         <div class="ai-closing-message">
             <strong>{{ closing }}</strong>
@@ -429,4 +437,8 @@
         if (e.key === 'Escape') closeQRModal();
     });
     </script>
+    <!-- html2canvas CDN for image capture -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <!-- Custom JS for capture/download -->
+    <script src="{{ url_for('static', filename='js/pdf_capture.js') }}"></script>
 {% endblock %}

@@ -129,15 +129,22 @@ def generate_itinerary_and_sections(taste_data, weather=None):
     prompt = f'''
     Create a {num_days}-day travel plan for {city}, {country} {date_str} with {vibe} theme.
     {weather_summary}{venue_guidance}{taste_guidance}
-    
+
     CRITICAL: Generate exactly {num_days} days. Count carefully: Day 1, Day 2, ... Day {num_days}.
     CRITICAL: Each activity must clearly connect to the user's stated preferences. Explain WHY each venue/activity was chosen based on their tastes.
-    
+
+    For the BUDGET section:
+    - Provide detailed, line-separated budget estimates for each of the following categories: accommodation, food, and activities.
+    - For each category, provide as many relevant lines as possible (up to 12 lines per category) as a list of strings, each with a clear cost value and a short description, e.g.:
+        ["Hotel XYZ: $120/night", "Boutique guesthouse: $85/night", ...]
+    - Use numbers and currency consistently. If possible, break down costs by type, location, or time period.
+    - Do NOT summarize as a single line; use a list of detailed lines for each budget category.
+
     Return ONLY valid JSON:
     {{
         "packing": {{"Clothing": ["item1", "item2"], "Electronics": ["smartphone", "charger"], "Documents": ["passport"], "Toiletries": ["item1"], "Other": ["item1"]}},
         "tips": ["tip1 for {city}", "tip2 for {city}", "tip3 for {city}"],
-        "budget": {{"accommodation": "cost for {city}", "food": "cost for {city}", "activities": "cost for {city}"}},
+        "budget": {{"accommodation": ["Hotel XYZ: $120/night", "Boutique guesthouse: $85/night", ...], "food": ["Lunch at Cafe: $15", ...], "activities": ["Museum entry: $20", ...]}},
         "transport": ["transport1 in {city}", "transport2 in {city}"],
         "safety": ["safety1", "safety2", "safety3"],
         "closing": "personalized message",
@@ -209,7 +216,21 @@ def generate_itinerary_and_sections(taste_data, weather=None):
                     if isinstance(items, list):
                         # Limit to 8 items and truncate text to 30 characters
                         data['packing'][category] = [item[:30] + '...' if len(item) > 30 else item for item in items[:8]]
-            
+
+            # Parse budget as lists of up to 12 lines for each category
+            if 'budget' in data and isinstance(data['budget'], dict):
+                for cat in ['accommodation', 'food', 'activities']:
+                    val = data['budget'].get(cat, [])
+                    if isinstance(val, str):
+                        # Split by line or semicolon
+                        lines = [line.strip() for line in re.split(r'[\n;]', val) if line.strip()]
+                        data['budget'][cat] = lines[:12]
+                    elif isinstance(val, list):
+                        # Only keep up to 12 lines
+                        data['budget'][cat] = [str(item).strip() for item in val[:12] if str(item).strip()]
+                    else:
+                        data['budget'][cat] = []
+
             return data
         except Exception as e:
             print(f"JSON parsing error: {e}")

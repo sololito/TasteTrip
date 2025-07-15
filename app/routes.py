@@ -19,7 +19,6 @@ main = Blueprint('main', __name__)
 
 @main.route('/qr')
 def qr():
-    from flask import request
     data = request.args.get('data')
     if not data:
         return 'Missing data', 400
@@ -142,22 +141,33 @@ def itinerary():
 
     # Step 2: Get taste-based city recommendation (Qloo -> Together AI)
     taste_data = get_taste_recommendations(user_input)
+    city = taste_data.get('city', '')
 
     # Step 3: Weather forecast (fetch only if journey is within 7 days from today)
     from datetime import datetime, timedelta
     current_date = datetime.now()
     weather = []
-    try:
-        start = datetime.strptime(start_date, '%Y-%m-%d')
-        end = datetime.strptime(end_date, '%Y-%m-%d')
-        days_until_start = (start - current_date).days
-        trip_days = (end - start).days + 1
-        forecast_days = min(trip_days, 7)
-        # Only fetch weather if journey starts within 7 days from today
-        if 0 <= days_until_start < 7:
-            weather = get_weather_forecast(taste_data["city"], days=forecast_days)
-    except Exception:
-        weather = []
+    if city and start_date:
+        today = datetime.now().date()
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if (start - today).days > 7:
+                # Out of range: show empty or N/A
+                weather = []
+            else:
+                forecast = get_weather_forecast(city, days=7)
+                # Build 6-day weather starting from start_date
+                weather_by_date = {d.get('date', ''): d for d in forecast}
+                weather = []
+                for i in range(6):
+                    day_str = (start + timedelta(days=i)).strftime('%Y-%m-%d')
+                    day_data = weather_by_date.get(day_str)
+                    if day_data:
+                        weather.append(day_data)
+                    else:
+                        weather.append({'date': day_str, 'desc': 'N/A', 'temp': 'N/A'})
+        except Exception as e:
+            weather = []
     if not weather:
         weather = []
     # Step 4: Generate AI-powered itinerary and sections with weather
@@ -174,6 +184,7 @@ def itinerary():
 
     # Step 6: Additional info and summary - use venues from taste data for consistency
     city_info = get_city_info(taste_data["city"], taste_data.get('venues', []))
+
     taste_summary = f"You love {user_input.get('music', 'various')} music, movies like {user_input.get('movie', 'various genres')}, and delicious {user_input.get('food', 'cuisine')} food."
 
     # Step 7: Get places and generate QR codes for navigation
@@ -187,11 +198,7 @@ def itinerary():
 
     # All cultural data now comes from AI - no hardcoded fallbacks
 
-    # Remove all static fallback blocks (budget, transport, safety, closing) after AI integration.
-    # The following block is now obsolete and causes indentation/syntax errors. All values are now from ai_sections.
-    # --- END OF FUNCTION ---
-    # --- Packing List Normalization ---
-    import json
+    # Packing List Normalization
     def robust_json_parse(val):
         tries = 0
         while isinstance(val, str) and tries < 2:
@@ -208,102 +215,47 @@ def itinerary():
             if not isinstance(item, str):
                 return str(item)
             fixes = {'rncoat': 'raincoat', 'rn jacket': 'rain jacket', 'chrgr': 'charger'}
-            for wrong, correct in fixes.items():
-                item = item.replace(wrong, correct)
-            return re.sub(r'\s+', ' ', item).strip()
+            for wrong, right in fixes.items():
+                item = item.replace(wrong, right)
+            return item
         
         categories = {
             'Clothing': [],
-            'Accessories': [],
-            'Toiletries': [],
             'Electronics': [],
             'Documents': [],
+            'Personal Care': [],
             'Other': []
         }
+        
         for item in flat_list:
-            clean_item = clean_packing_item(item)
-            lower = clean_item.lower()
-            if any(word in lower for word in ['shirt', 'short', 'dress', 'jacket', 'shoes', 'pants', 'swim', 'sock', 'clothing']):
-                categories['Clothing'].append(clean_item)
-            elif any(word in lower for word in ['hat', 'sunglass', 'belt', 'scarf', 'glove', 'accessor']):
-                categories['Accessories'].append(clean_item)
-            elif any(word in lower for word in ['tooth', 'shampoo', 'soap', 'toiletr', 'deodorant', 'sunscreen']):
-                categories['Toiletries'].append(clean_item)
-            elif any(word in lower for word in ['charger', 'adapter', 'phone', 'camera', 'electronic', 'laptop', 'tablet']):
-                categories['Electronics'].append(clean_item)
-            elif any(word in lower for word in ['passport', 'visa', 'document', 'id', 'insurance']):
-                categories['Documents'].append(clean_item)
-            else:
-                categories['Other'].append(clean_item)
-        return {cat: items for cat, items in categories.items() if items}
-
-    packing_section = ai_sections.get('packing', {})
-    packing_list = robust_json_parse(packing_section)
-    # If the AI returns a dict with a single 'packing' key, extract its value
-    if isinstance(packing_list, dict) and set(packing_list.keys()) == {'packing'}:
-        packing_list = packing_list['packing']
-    if not isinstance(packing_list, (dict, list)):
-        packing_list = []
-    # If packing_list is a flat list, categorize it
-    if isinstance(packing_list, list):
-        packing_list = categorize_flat_packing(packing_list)
-
-    # --- Normalize packing, tips, budget, transport for template ---
-    def normalize_json_section(section):
-        if isinstance(section, str):
-            parsed = try_parse_json(section)
-            return parsed if isinstance(parsed, (dict, list)) else section
-        return section
-
-    packing_list = normalize_json_section(ai_sections.get('packing', {}))
-    tips = normalize_json_section(ai_sections.get('tips', {}))
-    budget = normalize_json_section(ai_sections.get('budget', {}))
-    transport = normalize_json_section(ai_sections.get('transport', {}))
-
-    def categorize_flat_packing(flat_list):
-        # Simple categorization based on keywords
-        categories = {
-            'Clothing': [],
-            'Accessories': [],
-            'Toiletries': [],
-            'Electronics': [],
-            'Documents': [],
-            'Other': []
-        }
-        for item in flat_list:
-            lower = item.lower()
-            if any(word in lower for word in ['shirt', 'short', 'dress', 'jacket', 'shoes', 'pants', 'swim', 'sock', 'clothing']):
+            item = clean_packing_item(item)
+            item_lower = item.lower()
+            
+            if any(word in item_lower for word in ['shirt', 'pants', 'dress', 'jacket', 'coat', 'shoes', 'socks', 'underwear', 'hat', 'scarf']):
                 categories['Clothing'].append(item)
-            elif any(word in lower for word in ['hat', 'sunglass', 'belt', 'scarf', 'glove', 'accessor']):
-                categories['Accessories'].append(item)
-            elif any(word in lower for word in ['tooth', 'shampoo', 'soap', 'toiletr', 'deodorant', 'sunscreen']):
-                categories['Toiletries'].append(item)
-            elif any(word in lower for word in ['charger', 'adapter', 'phone', 'camera', 'electronic', 'laptop', 'tablet']):
+            elif any(word in item_lower for word in ['phone', 'charger', 'camera', 'laptop', 'tablet', 'headphones', 'adapter']):
                 categories['Electronics'].append(item)
-            elif any(word in lower for word in ['passport', 'visa', 'document', 'id', 'insurance']):
+            elif any(word in item_lower for word in ['passport', 'visa', 'ticket', 'id', 'license', 'insurance']):
                 categories['Documents'].append(item)
+            elif any(word in item_lower for word in ['toothbrush', 'shampoo', 'soap', 'medicine', 'sunscreen', 'lotion']):
+                categories['Personal Care'].append(item)
             else:
                 categories['Other'].append(item)
-        # Remove empty categories
-        return {cat: items for cat, items in categories.items() if items}
+        
+        return {k: v for k, v in categories.items() if v}
 
-    # If packing_list is a flat list, categorize it
-    if isinstance(packing_list, list):
-        packing_list = categorize_flat_packing(packing_list)
+    # Process packing list
+    packing_raw = ai_sections.get('packing', [])
+    packing_parsed = robust_json_parse(packing_raw)
+    
+    if isinstance(packing_parsed, list):
+        packing_list = categorize_flat_packing(packing_parsed)
+    elif isinstance(packing_parsed, dict):
+        packing_list = packing_parsed
+    else:
+        packing_list = {'Other': [str(packing_raw)]}
 
-    # Ensure itinerary is always a dict for the template
-    itinerary_data = ai_sections.get('itinerary', {})
-    if isinstance(itinerary_data, str):
-        try:
-            itinerary_data = json.loads(itinerary_data)
-        except Exception:
-            itinerary_data = {}
-    # If itinerary_data is a dict with a single 'itinerary' key, extract its value
-    if isinstance(itinerary_data, dict) and set(itinerary_data.keys()) == {'itinerary'}:
-        itinerary_data = itinerary_data['itinerary']
-    if not isinstance(itinerary_data, dict):
-        itinerary_data = {}
-
+    # Process AI sections for template rendering
     def robust_json_parse(val):
         tries = 0
         while isinstance(val, str) and tries < 3:
@@ -357,10 +309,6 @@ def itinerary():
         else:
             cleaned_itinerary[day] = {'all_day': clean_text_content(schedule) if schedule else 'No activities planned'}
 
-    # Debug packing data
-    print(f"Raw packing from AI: {packing}")
-    print(f"Type of packing: {type(packing)}")
-    
     # Use robustly parsed sections for all template variables
     packing_list = packing
     tips = sections['tips']
@@ -369,14 +317,6 @@ def itinerary():
     tags = sections['safety']
     closing = sections['closing']
     
-    print(f"Final packing_list: {packing_list}")
-    print(f"Type of packing_list: {type(packing_list)}")
-    
-    # Debug safety tags
-    print(f"Raw safety from AI: {sections.get('safety', 'MISSING')}")
-    print(f"Final tags: {tags}")
-    print(f"Type of tags: {type(tags)}")
-
     # Get Qloo branding info
     from .qloo_api import get_qloo_branding_info
     qloo_info = get_qloo_branding_info()
@@ -385,12 +325,6 @@ def itinerary():
     enhanced_places = taste_data.get('venues', places) if taste_data.get('venues') else places
     enhanced_maps_links = [google_maps_link(place, taste_data["city"]) for place in enhanced_places]
     enhanced_qr_codes = {place: f"/qr?data={google_maps_link(place, taste_data['city'])}" for place in enhanced_places}
-    
-    # Debug output for verification
-    print(f"Enhanced places from Qloo venues: {len(enhanced_places)} venues")
-    print(f"Taste mapping data: {len(taste_data.get('taste_mapping', []))} mappings")
-    print(f"Taste mapping content: {taste_data.get('taste_mapping', [])}")
-    print(f"Template will receive taste_mapping: {taste_data.get('taste_mapping', [])}")
     
     return render_template(
         "itinerary.html",
@@ -409,7 +343,6 @@ def itinerary():
         closing=str(closing)[:500] if closing else '',
         itinerary=itinerary_data,
         weather=weather,
-
         start_date=user_input["start_date"],
         end_date=user_input["end_date"],
         qloo_info=qloo_info,
@@ -421,7 +354,8 @@ def itinerary():
             'movie': user_input.get('movie', ''),
             'food': user_input.get('food', ''),
             'days': user_input.get('days', '3')
-        }
+        },
+        user_prompt=trip_description
     )
 
 @main.route('/get_flight_estimate', methods=['POST'])
@@ -456,9 +390,9 @@ def download_pdf():
         text = re.sub(r'#\s*', '', text)
         text = text.replace('AI', '').replace('ai', '')
         # Remove AI translation artifacts
-        text = re.sub(r'"[^"]*"\s*,\s*[^"]*"[^"]*"', '', text)  # Remove quoted translations
-        text = re.sub(r'The English translation of "[^"]*" is "([^"]*)"\.?', r'\1', text)  # Extract translation
-        text = re.sub(r'"([^"]*)",\s*[^"]*"[^"]*"', r'\1', text)  # Clean quoted names
+        text = re.sub(r'"[^"]"\s,\s*[^"]"[^"]"', '', text)  # Remove quoted translations
+        text = re.sub(r'The English translation of "[^"]" is "([^"])"\.?', r'\1', text)  # Extract translation
+        text = re.sub(r'"([^"])",\s[^"]"[^"]"', r'\1', text)  # Clean quoted names
         text = re.sub(r'"([^"]*)"\.', r'\1', text)  # Remove quotes and periods
         
         # Fix common word parsing errors
@@ -480,6 +414,22 @@ def download_pdf():
         # Fix broken words at line boundaries
         text = re.sub(r'([a-z])\s+([a-z]{1,3})\s+([a-z])', lambda m: 
                      m.group(1) + m.group(2) + m.group(3) if len(m.group(2)) <= 2 else m.group(0), text)
+        
+        # Handle budget data specifically
+        if 'Budget Estimates' in text:
+            # Split into sections
+            sections = text.split('Budget Estimates')
+            cleaned_sections = []
+            for section in sections:
+                # Clean each section
+                section = section.strip()
+                if not section:
+                    continue
+                # Remove continuation marks
+                section = re.sub(r'\\', '', section)  # Remove backslashes
+                section = re.sub(r'\s*•\s*', '• ', section)  # Normalize bullet points
+                cleaned_sections.append(section)
+            text = 'Budget Estimates'.join(cleaned_sections)
         
         return text.strip()
     clean_content = clean_section(content)
@@ -576,6 +526,69 @@ def download_pdf():
     pdf.setFillColor(accent_color)
     pdf.drawCentredString(width // 2, y, "Your personalized cultural adventure awaits!")
     y -= 30
+
+    # --- Text wrapping utility (must be defined before use) ---
+    def wrap_text(text, max_width, font_size=11):
+        pdf.setFont("Helvetica", font_size)
+        words = str(text).split()
+        lines = []
+        current_line = ""
+        for word in words:
+            # Handle long words that exceed max width
+            if pdf.stringWidth(word) > max_width:
+                if current_line:
+                    lines.append(current_line)
+                    current_line = ""
+                # Break long word
+                while len(word) > 0:
+                    char_count = 0
+                    temp_word = ""
+                    for char in word:
+                        if pdf.stringWidth(temp_word + char) <= max_width:
+                            temp_word += char
+                            char_count += 1
+                        else:
+                            break
+                    if temp_word:
+                        lines.append(temp_word)
+                    word = word[char_count:]
+            else:
+                test_line = current_line + (" " if current_line else "") + word
+                if pdf.stringWidth(test_line) <= max_width:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word
+        if current_line:
+            lines.append(current_line)
+        return lines
+
+    # --- Add user prompt to cover page (before showPage) ---
+    prompt_text = request.form.get('trip_description', '').strip()
+    if prompt_text:
+        # Draw a visually distinct box for the prompt
+        box_width = width - 120
+        box_height = 36 + 14 * len(wrap_text(prompt_text, box_width - 20, 11))
+        y_box_top = max(50, y - 60 - box_height)
+        pdf.setFillColor(HexColor('#f5f7fa'))  # Light background
+        pdf.roundRect(60, y_box_top, box_width, box_height, 10, fill=1, stroke=0)
+        pdf.setStrokeColor(HexColor('#008080'))  # Teal border
+        pdf.setLineWidth(2)
+        pdf.roundRect(60, y_box_top, box_width, box_height, 10, fill=0, stroke=1)
+        # Draw the title
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.setFillColor(HexColor('#008080'))
+        pdf.drawCentredString(width // 2, y_box_top + box_height - 18, "Your Trip Preferences:")
+        # Draw the prompt text
+        pdf.setFont("Helvetica-Oblique", 11)
+        pdf.setFillColor(secondary_text)
+        prompt_lines = wrap_text(prompt_text, box_width - 20, 11)
+        y_prompt = y_box_top + box_height - 36
+        for line in prompt_lines:
+            pdf.drawCentredString(width // 2, y_prompt, line)
+            y_prompt -= 14
+
     pdf.showPage()
     y = height - 40
 
@@ -646,42 +659,46 @@ def download_pdf():
     pdf.drawString(40, y, f"🌍 Destination Overview: {city_name}")
     y -= 25
     
-    # 2-column layout: Left - description, Right - image space
-    col_width = (width - 120) // 2
-    
+    # Improved layout: description as a wide, well-aligned paragraph
+    para_width = width - 120  # Use nearly the full page width
     if description:
-        desc_lines = wrap_text(description, col_width - 20)
-        pdf.setFont("Helvetica", 11)
+        desc_lines = wrap_text(description, para_width, 12)
+        pdf.setFont("Helvetica", 12)
         pdf.setFillColor(text_color)
-        for line in desc_lines[:5]:  # Max 5 lines
+        for line in desc_lines:
             pdf.drawString(60, y, line)
-            y -= 13
+            y -= 16
+        y -= 10  # Extra space after paragraph
     else:
-        pdf.setFont("Helvetica", 11)
+        pdf.setFont("Helvetica", 12)
         pdf.setFillColor(text_color)
         pdf.drawString(60, y, f"{city_name} is a vibrant cultural destination.")
-        y -= 13
+        y -= 16
+        y -= 10
     
     # "Why This City?" highlight box with reason content
     reason_text = request.form.get('reason', '')
     if reason_text:
+        # Draw a rounded, colored box for the section
+        reason_box_width = width - 100
+        reason_box_height = 44 + 15 * len(wrap_text(reason_text, reason_box_width - 30, 11))
         box_y = y - 10
         pdf.setFillColor(primary_color)
-        pdf.rect(40, box_y - 25, width - 80, 30, fill=1)
-        pdf.setFont("Helvetica-Bold", 12)
+        pdf.roundRect(50, box_y - reason_box_height, reason_box_width, reason_box_height, 10, fill=1, stroke=0)
+        # Draw the section title
+        pdf.setFont("Helvetica-Bold", 13)
         pdf.setFillColor(HexColor('#FFFFFF'))
-        pdf.drawString(50, box_y - 15, "Why This City?")
-        y = box_y - 35
-        
-        # Clean and wrap reason text
+        pdf.drawString(65, box_y - 22, "Why This City?")
+        # Prepare and draw the reason text
         clean_reason = re.sub(r'\s+', ' ', reason_text.replace('\n', ' ')).strip()
-        reason_lines = wrap_text(clean_reason, width - 120, 10)
-        pdf.setFont("Helvetica", 10)
-        pdf.setFillColor(text_color)
-        for line in reason_lines[:6]:  # Max 6 lines for reason
-            pdf.drawString(60, y, line)
-            y -= 12
-        y -= 15
+        reason_lines = wrap_text(clean_reason, reason_box_width - 30, 11)
+        pdf.setFont("Helvetica", 11)
+        pdf.setFillColor(HexColor('#FFFFFF'))
+        y_reason = box_y - 38
+        for line in reason_lines:
+            pdf.drawString(65, y_reason, line)
+            y_reason -= 15
+        y = box_y - reason_box_height - 18
     
     # --- ENHANCED CULTURAL PREFERENCES SECTION ---
     taste_mapping_raw = request.form.get('taste_mapping', '[]')
@@ -701,7 +718,7 @@ def download_pdf():
         pdf.setFillColor(accent_color)
         pdf.drawString(50, y, u"\U0001F3B5 Music \u2022 \U0001F3AC Film \u2022 \U0001F37D Cuisine \u2022 \U0001F9ED Travel Vibe")
         y -= 20
-        
+        y -= 20  # Extra space after taste summary description
         # Table headers with better spacing
         pdf.setFont("Helvetica-Bold", 10)
         pdf.setFillColor(header_color)
@@ -745,6 +762,8 @@ def download_pdf():
         
         y -= 10
 
+    y -= 20  # Extra space after Taste Summary table
+    y -= 20  # Extra space before Weather Forecast section
     # Weather Forecast section
     if y < 100:
         pdf.showPage()
@@ -755,29 +774,72 @@ def download_pdf():
     y -= 18
     
     if weather_data and len(weather_data) > 0:
-        # Weather table header
-        pdf.setFont("Helvetica-Bold", 11)
-        pdf.setFillColor(header_color)
-        pdf.drawString(60, y, "Date")
-        pdf.drawString(150, y, "Condition")
-        pdf.drawString(280, y, "Temperature")
-        y -= 16
-        
-        # Weather data rows
-        pdf.setFont("Helvetica", 10)
-        pdf.setFillColor(text_color)
-        for day in weather_data[:7]:  # Show up to 7 days
-            pdf.drawString(60, y, str(day.get('date', 'N/A')))
-            pdf.drawString(150, y, str(day.get('desc', 'N/A'))[:18])
-            pdf.drawString(280, y, f"{day.get('temp', 'N/A')}°C")
-            y -= 13
+        from datetime import datetime, timedelta
+        start_date_str = request.form.get('start_date', '')
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        except Exception:
+            start_date = None
+        today = datetime.now().date()
+        if not start_date or (start_date.date() - today).days > 7:
+            pdf.setFont("Helvetica", 11)
+            pdf.setFillColor(text_color)
+            pdf.drawString(60, y, "Weather forecast is only available for trips starting within the next 7 days.")
+            y -= 20
+        else:
+            # Build a date-indexed dict for fast lookup
+            weather_by_date = {d.get('date', ''): d for d in weather_data}
+            forecast_days = 6
+            forecast_rows = []
+            for i in range(forecast_days):
+                day_str = (start_date + timedelta(days=i)).strftime('%Y-%m-%d')
+                day_data = weather_by_date.get(day_str, None)
+                if day_data:
+                    forecast_rows.append(day_data)
+                else:
+                    forecast_rows.append({'date': day_str, 'desc': 'N/A', 'temp': 'N/A'})
+            # Table layout parameters
+            table_x = 60
+            table_width = width - 120
+            col_date = table_x
+            col_cond = col_date + 100
+            col_temp = col_cond + 220
+            row_height = 20
+            n_rows = forecast_days + 1  # +1 for header
+            table_height = row_height * n_rows + 20
+            # Draw table box
+            pdf.setFillColor(HexColor('#f5f7fa'))
+            pdf.roundRect(table_x - 10, y - table_height + 10, table_width, table_height, 8, fill=1, stroke=0)
+            pdf.setStrokeColor(header_color)
+            pdf.setLineWidth(1)
+            pdf.roundRect(table_x - 10, y - table_height + 10, table_width, table_height, 8, fill=0, stroke=1)
+            # Draw header row
+            pdf.setFont("Helvetica-Bold", 11)
+            pdf.setFillColor(header_color)
+            pdf.drawString(col_date, y, "Date")
+            pdf.drawString(col_cond, y, "Condition")
+            pdf.drawString(col_temp, y, "Temperature")
+            # Draw divider lines
+            pdf.setStrokeColor(header_color)
+            pdf.setLineWidth(0.5)
+            pdf.line(col_cond - 10, y + 5, col_cond - 10, y - table_height + row_height + 20)
+            pdf.line(col_temp - 10, y + 5, col_temp - 10, y - table_height + row_height + 20)
+            y -= row_height
+            # Draw weather rows
+            pdf.setFont("Helvetica", 10)
+            pdf.setFillColor(text_color)
+            for day in forecast_rows:
+                pdf.drawString(col_date, y, str(day.get('date', 'N/A')))
+                pdf.drawString(col_cond, y, str(day.get('desc', 'N/A'))[:30])
+                pdf.drawString(col_temp, y, f"{day.get('temp', 'N/A')}°C")
+                y -= row_height
+            y -= 8
     else:
         pdf.setFont("Helvetica", 11)
         pdf.setFillColor(text_color)
         pdf.drawString(60, y, f"Weather forecast for {city_name} will be available closer to your travel dates.")
         y -= 14
     y -= 20
-    
     # Your Taste Summary section
     if y < 80:
         pdf.showPage()
@@ -793,54 +855,120 @@ def download_pdf():
     for line in summary_lines[:3]:  # Max 3 lines
         pdf.drawString(60, y, line)
         y -= 14
-    y -= 15
-
-    # Packing checklist (AI) - Enhanced formatting
-    if y < 150:
+    y -= 35  # Increased space between Taste Summary and Weather Forecast
+    
+    # --- Redesigned Packing Checklist Section ---
+    if y < 180:
         pdf.showPage()
         y = height - 40
-    pdf.setFont("Helvetica-Bold", 14)
-    pdf.setFillColor(accent_color)
-    pdf.drawString(40, y, u"\U0001F392 Packing Checklist:")
-    y -= 16
-    
+    box_left = 40
+    box_width = width - 80
+    # Estimate box height: header + (categories * (cat header + items * line height + spacing))
     packing_list_raw = request.form.get('packing_list', '{}')
     try:
         packing_list = json.loads(packing_list_raw) if isinstance(packing_list_raw, str) else packing_list_raw
     except Exception:
         packing_list = {}
-    
+    # Calculate lines for all items to estimate box height
+    def count_lines(items, col_width):
+        total = 0
+        for item in items:
+            lines = wrap_text(clean_section(str(item)), col_width, 10)
+            total += len(lines)
+        return total
+    box_height = 38  # header
+    col_width = (box_width - 40) // 2
+    min_cat_height = 22
+    # Ensure 'Others' section exists
     if isinstance(packing_list, dict) and packing_list:
-        for category, items in packing_list.items():
+        if 'Others' not in packing_list:
+            packing_list['Others'] = []
+        for cat, items in packing_list.items():
+            n = count_lines(items, col_width)
+            box_height += max(min_cat_height, n * 13) + 16
+    elif isinstance(packing_list, list) and packing_list:
+        box_height += count_lines(packing_list, box_width - 40) * 13 + 22
+    else:
+        box_height += 40
+    if y - box_height < 60:
+        pdf.showPage()
+        y = height - 40
+    box_y = y - box_height + 10
+    pdf.setFillColor(HexColor('#f5f7fa'))
+    pdf.roundRect(box_left, box_y, box_width, box_height, 10, fill=1, stroke=0)
+    pdf.setStrokeColor(accent_color)
+    pdf.setLineWidth(2)
+    pdf.roundRect(box_left, box_y, box_width, box_height, 10, fill=0, stroke=1)
+    # Section header
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.setFillColor(accent_color)
+    pdf.drawString(box_left + 20, y - 18, u"🎒 Packing Checklist")
+    y -= 38
+    # Render items in two columns if possible
+    col1_x = box_left + 32
+    col2_x = box_left + 32 + col_width + 32
+    col_y_start = y
+    if isinstance(packing_list, dict) and packing_list:
+        for idx, (category, items) in enumerate(packing_list.items()):
+            if y < box_y + 40:
+                break
+            # Category header
             pdf.setFont("Helvetica-Bold", 11)
             pdf.setFillColor(header_color)
-            pdf.drawString(50, y, f"{category}:")
-            y -= 14
-            
-            if isinstance(items, list):
-                pdf.setFont("Helvetica", 10)
-                pdf.setFillColor(text_color)
-                for item in items[:8]:  # More items per category
-                    item_text = clean_section(str(item))
-                    # Additional cleaning for packing items
-                    item_text = item_text.replace('rn ', 'rain ').replace('ecnomy', 'economy')
-                    # Wrap long items
-                    if len(item_text) > 60:
-                        item_lines = wrap_text(item_text, width - 140, 10)
-                        for line in item_lines[:2]:  # Max 2 lines per item
-                            pdf.drawString(70, y, f"• {line}" if line == item_lines[0] else f"  {line}")
-                            y -= 11
-                    else:
-                        pdf.drawString(70, y, f"• {item_text}")
-                        y -= 11
-            y -= 8
+            pdf.drawString(col1_x, y, f"{category}:")
+            y -= 15
+            # Split items into two columns for long lists
+            if len(items) > 6:
+                mid = (len(items) + 1) // 2
+                col1_items = items[:mid]
+                col2_items = items[mid:]
+            else:
+                col1_items = items
+                col2_items = []
+            max_rows = max(len(col1_items), len(col2_items))
+            pdf.setFont("Helvetica", 12)
+            pdf.setFillColor(text_color)
+            row_y = y
+            for i in range(max_rows):
+                if i < len(col1_items):
+                    item_text = clean_section(str(col1_items[i]))
+                    lines = wrap_text(item_text, col_width, 12)
+                    for lidx, line in enumerate(lines):
+                        bullet = "• " if lidx == 0 else "  "
+                        pdf.drawString(col1_x, row_y, f"{bullet}{line}")
+                        row_y -= 16
+                if i < len(col2_items):
+                    item_text = clean_section(str(col2_items[i]))
+                    lines = wrap_text(item_text, col_width, 12)
+                    for lidx, line in enumerate(lines):
+                        bullet = "• " if lidx == 0 else "  "
+                        pdf.drawString(col2_x, y, f"{bullet}{line}")
+                        y -= 16
+            y = min(row_y, y) - 10
+            # Divider between categories
+            if idx < len(packing_list) - 1:
+                pdf.setStrokeColor(HexColor('#cccccc'))
+                pdf.setLineWidth(1)
+                pdf.line(box_left + 24, y + 5, box_left + box_width - 24, y + 5)
+                y -= 8
     elif isinstance(packing_list, list) and packing_list:
+        pdf.setFont("Helvetica", 12)
+        pdf.setFillColor(text_color)
+        for item in packing_list:
+            item_text = clean_section(str(item))
+            lines = wrap_text(item_text, box_width - 40, 12)
+            for lidx, line in enumerate(lines):
+                bullet = "• " if lidx == 0 else "  "
+                pdf.drawString(col1_x, y, f"{bullet}{line}")
+                y -= 16
+        y -= 10
+    else:
         pdf.setFont("Helvetica", 10)
         pdf.setFillColor(text_color)
-        for item in packing_list[:20]:  # More items
-            pdf.drawString(60, y, f"• {clean_section(str(item))}")
-            y -= 11
-    y -= 15
+        pdf.drawString(col1_x, y, "Packing list unavailable.")
+        y -= 14
+    y = box_y - 16
+    y -= 20  # Extra space before Budget Estimates
 
 
 
@@ -856,19 +984,260 @@ def download_pdf():
         budget = {}
     
     if isinstance(budget, dict) and budget:
-        # Create budget table
-        pdf.setFont("Helvetica-Bold", 10)
-        pdf.setFillColor(header_color)
-        pdf.drawString(60, y, "Category")
-        pdf.drawString(160, y, "Estimate")
-        y -= 14
+        # Render as a visually distinct rounded table box
+        box_width = width - 80
+        col1_x = 60  # Category col
+        col2_x = 180 # Accommodation
+        col3_x = 320 # Food
+        col4_x = 440 # Activities
+        col_widths = [col2_x-col1_x, col3_x-col2_x, col4_x-col3_x, box_width-col4_x+40]
+        # Extract values
+        def clean_budget_line(line):
+            """
+            Clean a single budget line: remove brackets, quotes, and extraneous marks, and apply phrase cleaning.
+            Also formats the line into a more readable format.
+            """
+            import re
+            # Remove leading/trailing brackets, quotes
+            line = line.strip()
+            # Remove leading brackets/quotes
+            line = re.sub(r'^[\[\]\(\)\{\}\'\"]+', '', line)
+            # Remove trailing brackets/quotes
+            line = re.sub(r'[\[\]\(\)\{\}\'\"]+$', '', line)
+            line = re.sub(r"^[,\s]+|[,\s]+$", '', line)
+            # Remove repeated/unwanted phrases
+            for phrase in [
+                'cost for', 'expecttospend', 'expect to spend', 'around', 'approximately', 'per activities', 'per activity',
+                'per meals', 'per meal', 'per day for meals', 'per day on', 'per day', 'per activities', 'per activity',
+                'per person', 'for', ':', ' - ', '--', '  '
+            ]:
+                line = line.replace(phrase, '')
+            # Remove double spaces
+            line = ' '.join(line.split())
+            # Format price with proper currency symbol and spacing
+            price_match = re.search(r'\$(\d+(?:\.\d{1,2})?/night|\$\d+)', line)
+            if price_match:
+                price = price_match.group(0)
+                # Remove price from description
+                desc = line.replace(price, '').strip()
+                # Format with proper spacing
+                line = f"{desc} {price}"
+            # Handle specific cases
+            if 'cafe du monde' in line.lower():
+                line = line.replace('cafe du monde', 'Cafe du Monde')
+            if 'beignet cafe' in line.lower():
+                line = line.replace('beignet cafe', 'Beignet Cafe')
+            if 'morial convention center' in line.lower():
+                line = line.replace('morial convention center', 'Ernest N. Morial Convention Center')
+            # Capitalize first letter
+            if line:
+                line = line[0].upper() + line[1:]
+            return line.strip()
+            # Capitalize first letter
+            if line:
+                line = line[0].upper() + line[1:]
+            return line.strip()
+
+        def parse_budget_category(val):
+            """
+            Parse budget category value into both list and sentence formats.
+            Returns a tuple of (cleaned_list, formatted_sentence)
+            """
+            import re
+            cleaned_list = []
+            formatted_sentence = []
+            
+            def clean_item(item):
+                """Clean a single item by removing brackets and quotes"""
+                item = str(item).strip()
+                # Remove any surrounding brackets, quotes, or parentheses
+                item = re.sub(r'^[\[\]\(\)\{\}\'\"]+', '', item)
+                item = re.sub(r'[\[\]\(\)\{\}\'\"]+$', '', item)
+                return item.strip()
+            
+            def format_sentence(desc, price):
+                """Format budget item as a sentence with proper spacing"""
+                return f"{desc} (${price})" if price else desc
+            
+            if isinstance(val, list):
+                # Clean and group related items
+                for item in val:
+                    item = clean_item(item)
+                    if not item:
+                        continue
+                    cleaned = clean_budget_line(item)
+                    
+                    # Extract price (including /night)
+                    price_match = re.search(r'\$(\d+(?:\.\d{1,2})?/night|\$\d+)', cleaned)
+                    price = price_match.group(0) if price_match else ''
+                    
+                    # Format and add to lists
+                    cleaned_list.append(cleaned)
+                    formatted_sentence.append(format_sentence(cleaned, price))
+            
+            elif isinstance(val, str):
+                # Clean the string first
+                val = clean_item(val)
+                # Split by common delimiters
+                raw_lines = re.split(r'[\n;\,]', val)
+                
+                for line in raw_lines:
+                    line = clean_item(line)
+                    if not line.strip():
+                        continue
+                    
+                    cleaned = clean_budget_line(line)
+                    
+                    # Extract price (including /night)
+                    price_match = re.search(r'\$(\d+(?:\.\d{1,2})?/night|\$\d+)', cleaned)
+                    price = price_match.group(0) if price_match else ''
+                    
+                    # Format and add to lists
+                    cleaned_list.append(cleaned)
+                    formatted_sentence.append(format_sentence(cleaned, price))
+                    cleaned = clean_budget_line(line)
+                    cleaned_list.append(cleaned)
+                    # Format for sentence
+                    if '$' in cleaned:
+                        parts = cleaned.split('$')
+                        if len(parts) == 2:
+                            desc = parts[0].strip()
+                            price = parts[1].strip()
+                            formatted_sentence.append(f"{desc} (${price})")
+                    else:
+                        formatted_sentence.append(cleaned)
+            
+            # Remove duplicates and empty items
+            cleaned_list = list(dict.fromkeys(cleaned_list))
+            formatted_sentence = list(dict.fromkeys(formatted_sentence))
+            
+            # Log the formats
+            print(f"Budget Parsing - List Format: {cleaned_list}")
+            print(f"Budget Parsing - Sentence Format: {formatted_sentence}")
+            
+            # Return both formats
+            return cleaned_list[:12], formatted_sentence[:12]
+
+        # Parse and clean budget categories robustly
+        accommodation_lines, accommodation_sentence = parse_budget_category(budget.get('accommodation', []))
+        food_lines, food_sentence = parse_budget_category(budget.get('food', []))
+        activities_lines, activities_sentence = parse_budget_category(budget.get('activities', []))
+
+        # Match packing list dimensions
+        box_left = 40
+        box_width = width - 80  # Same as packing list
         
+        # Calculate column widths based on available space
+        total_col_width = box_width - 80  # 40px padding on each side
+        col_padding = 20  # Reduced padding between columns
+        
+        # Calculate column widths proportionally
+        category_width = int(total_col_width * 0.15)  # 15% for Category
+        acc_width = int(total_col_width * 0.25)  # 25% for Accommodation
+        food_width = int(total_col_width * 0.25)  # 25% for Food
+        act_width = int(total_col_width * 0.30)  # 30% for Activities
+        
+        # Calculate column positions
+        col1_x = box_left + 40  # 40px left padding
+        col2_x = col1_x + category_width + col_padding
+        col3_x = col2_x + acc_width + col_padding
+        col4_x = col3_x + food_width + col_padding
+        
+        # Wrap text for each cell with precise column widths
+        # Use sentence format for better readability
+        acc_lines = []
+        for line in accommodation_sentence:
+            # Subtract padding and extra space for bullet points
+            acc_lines.extend(wrap_text(line, acc_width - col_padding - 15, 11))
+        acc_lines = acc_lines[:12]
+        
+        food_lines_wrapped = []
+        for line in food_sentence:
+            # Subtract padding and extra space for bullet points
+            food_lines_wrapped.extend(wrap_text(line, food_width - col_padding - 15, 11))
+        food_lines_wrapped = food_lines_wrapped[:12]
+        
+        act_lines_wrapped = []
+        for line in activities_sentence:
+            # Subtract padding and extra space for bullet points
+            act_lines_wrapped.extend(wrap_text(line, act_width - col_padding - 15, 11))
+        act_lines_wrapped = act_lines_wrapped[:12]
+        
+        max_lines = max(len(acc_lines), len(food_lines_wrapped), len(act_lines_wrapped))
+        box_height = 60 + 16 * max_lines
+        
+        # Ensure we have enough space for the table
+        if y - box_height < 60:
+            pdf.showPage()
+            y = height - 40
+        
+        box_y = y - box_height + 10
+        
+        # Draw main table container with subtle background
+        pdf.setFillColor(HexColor('#f5f7fa'))
+        pdf.roundRect(40, box_y, box_width, box_height, 10, fill=1, stroke=0)
+        
+        # Draw table header with bold styling
+        pdf.setStrokeColor(header_color)
+        pdf.setLineWidth(2)
+        pdf.roundRect(40, box_y, box_width, box_height, 10, fill=0, stroke=1)
+        
+        # Section title
+        pdf.setFont("Helvetica-Bold", 13)
+        pdf.setFillColor(header_color)
+        pdf.drawString(60, y - 18, "Budget Estimates")
+        
+        # Draw table headers with improved spacing
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(col1_x, y - 38, "Category")
+        pdf.drawString(col2_x, y - 38, "Accommodation")
+        pdf.drawString(col3_x, y - 38, "Food")
+        pdf.drawString(col4_x, y - 38, "Activities")
+        
+        # Draw vertical dividers with improved appearance
+        divider_top = y - 42
+        divider_bottom = box_y + 10
+        pdf.setStrokeColor(header_color)
+        pdf.setLineWidth(1)
+        
+        # Draw lighter dividers for a cleaner look
+        pdf.setStrokeColor(HexColor('#cccccc'))
+        pdf.setLineWidth(0.5)
+        pdf.line(col2_x - col_padding//2, divider_top, col2_x - col_padding//2, divider_bottom)
+        pdf.line(col3_x - col_padding//2, divider_top, col3_x - col_padding//2, divider_bottom)
+        pdf.line(col4_x - col_padding//2, divider_top, col4_x - col_padding//2, divider_bottom)
+        
+        # Draw daily row label with improved alignment
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.setFillColor(text_color)
+        row_y = y - 58
+        pdf.drawString(col1_x, row_y, "Daily")
+        
+        # Draw each row with improved text alignment and spacing
         pdf.setFont("Helvetica", 11)
         pdf.setFillColor(text_color)
-        for category, amount in budget.items():
-            pdf.drawString(60, y, category.capitalize())
-            pdf.drawString(160, y, clean_section(str(amount)))
-            y -= 13
+        for i in range(max_lines):
+            acc = acc_lines[i] if i < len(acc_lines) else ""
+            food_val = food_lines_wrapped[i] if i < len(food_lines_wrapped) else ""
+            act_val = act_lines_wrapped[i] if i < len(act_lines_wrapped) else ""
+            
+            # Draw text with improved alignment and bullet points
+            if acc:
+                pdf.drawString(col2_x, row_y, "• " + acc)
+            if food_val:
+                pdf.drawString(col3_x, row_y, "• " + food_val)
+            if act_val:
+                pdf.drawString(col4_x, row_y, "• " + act_val)
+            
+            # Add a subtle horizontal divider between rows
+            if i < max_lines - 1:
+                pdf.setStrokeColor(HexColor('#f0f0f0'))
+                pdf.setLineWidth(0.5)
+                pdf.line(col1_x, row_y - 8, col4_x + act_width, row_y - 8)
+            
+            row_y -= 16
+        
+        y = box_y - 16
     else:
         pdf.setFont("Helvetica", 11)
         pdf.setFillColor(text_color)
@@ -876,103 +1245,143 @@ def download_pdf():
         y -= 13
     y -= 10
 
-
     # Flight Estimates section
+    y -= 20  # Extra space after Budget Estimates
     if y < 120:
         pdf.showPage()
         y = height - 40
-    from datetime import datetime
-    from .itinerary import get_flight_estimate
+    # Section header with icon OUTSIDE the table
     pdf.setFont("Helvetica-Bold", 14)
     pdf.setFillColor(accent_color)
-    pdf.drawString(40, y, u"\u2708 Flight Estimates:")
-    y -= 16
-    pdf.setFont("Helvetica", 11)
-    pdf.setFillColor(text_color)
-    
-    if start_date:
-        try:
-            dt_obj = datetime.strptime(start_date, "%Y-%m-%d")
-            month_year = dt_obj.strftime('%B %Y')
-        except Exception:
-            month_year = datetime.now().strftime('%B %Y')
-    else:
-        month_year = datetime.now().strftime('%B %Y')
-    
-    # Get flight estimate from webpage data or generate new one
+    pdf.drawString(40, y, u"✈ Flight Estimates")
+    y -= 18
+    from datetime import datetime
+    from .itinerary import get_flight_estimate
+    # --- Redesigned Flight Estimates Section ---
+    # Match Budget Estimates table size and style
+    table_left = 40
+    table_right = width - 40
+    box_width = table_right - table_left
+    box_height = 110  # Increased to fit all content and tip
+    if y - box_height < 60:
+        pdf.showPage()
+        y = height - 40
+    box_y = y - box_height + 10
+    pdf.setFillColor(HexColor('#f5f7fa'))
+    pdf.roundRect(table_left, box_y, box_width, box_height, 10, fill=1, stroke=0)
+    pdf.setStrokeColor(accent_color)
+    pdf.setLineWidth(2)
+    pdf.roundRect(table_left, box_y, box_width, box_height, 10, fill=0, stroke=1)
+    # Flight price
+    # Always use web-supplied flight_estimate if present
     flight_estimate_raw = request.form.get('flight_estimate', '')
+    price = "N/A"
+    sites = ["Skyscanner", "Kayak", "Expedia"]
     try:
         if flight_estimate_raw:
             flight_data = json.loads(flight_estimate_raw)
-            price = flight_data.get('price', 'Contact travel agent for pricing')
-            sites = flight_data.get('sites', ['Skyscanner', 'Kayak', 'Expedia'])
+            price = flight_data.get('price', 'N/A')
+            sites = flight_data.get('sites', ["Skyscanner", "Kayak", "Expedia"])
         else:
-            from .itinerary import get_flight_estimate
-            flight_price, flight_summary = get_flight_estimate(departure_city, city_name, month_year)
-            if flight_price:
-                price = f"${int(flight_price)} USD"
-            else:
-                price = "Contact travel agent for pricing"
-            sites = ["Skyscanner", "Kayak", "Expedia"]
+            price = "N/A"
     except Exception as e:
-        print(f"Flight estimate error in PDF: {e}")
-        price = "Contact travel agent for pricing"
+        print(f"Flight estimate parse error in PDF: {e}")
+        price = "N/A"
         sites = ["Skyscanner", "Kayak", "Expedia"]
-    
+    print(f"[DEBUG] Flight PDF price: {price}, sites: {sites}")
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.setFillColor(header_color)
+    pdf.drawString(table_left + 40, y - 38, "Estimated Round-trip Cost:")
+    pdf.setFont("Helvetica", 12)
+    pdf.setFillColor(text_color)
+    pdf.drawString(table_left + 240, y - 38, str(price))
+    # Booking sites with icons
     pdf.setFont("Helvetica-Bold", 11)
+    pdf.setFillColor(header_color)
+    pdf.drawString(table_left + 40, y - 58, "Best Booking Sites:")
+    pdf.setFont("Helvetica", 11)
     pdf.setFillColor(text_color)
-    pdf.drawString(60, y, f"Estimated Round-trip Cost: {price}")
-    y -= 16
-    
-    pdf.setFont("Helvetica", 10)
-    pdf.setFillColor(text_color)
-    pdf.drawString(60, y, "Best Booking Sites:")
-    y -= 12
-    
-    for site in sites[:3]:
-        pdf.drawString(70, y, f"• {site}")
-        y -= 11
-    
-    pdf.setFont("Helvetica-Oblique", 9)
-    pdf.setFillColor(text_color)
-    pdf.drawString(60, y, "Tip: Book 2-3 months in advance for best prices.")
-    y -= 20
+    icon_map = {"Skyscanner": u"🌐", "Kayak": u"🛶", "Expedia": u"🧳"}
+    site_x = table_left + 190
+    for i, site in enumerate(sites[:3]):
+        icon = icon_map.get(site, u"🔗")
+        pdf.drawString(site_x + i*90, y - 58, f"{icon} {site}")
+    # Booking tip inside the table at the bottom
+    pdf.setFont("Helvetica-Oblique", 10)
+    pdf.setFillColor(HexColor('#555555'))
+    pdf.drawString(table_left + 40, box_y + 18, "Tip: Book 2-3 months in advance for best prices.")
+    y = box_y - 16
 
-    # Travel Essentials Section
-    if y < 150:
+    # --- Redesigned Travel Essentials Section as Subheadings ---
+    # Section header
+    if y < 180:
         pdf.showPage()
         y = height - 40
     pdf.setFont("Helvetica-Bold", 15)
     pdf.setFillColor(header_color)
-    pdf.drawString(40, y, u"\U0001F9F3 Travel Essentials:")
-    y -= 20
-    
+    pdf.drawString(40, y, u"🧳 Travel Essentials")
+    y -= 25
+
     # Tips
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.setFillColor(accent_color)
-    pdf.drawString(50, y, u"\U0001F4A1 Travel Tips:")
-    y -= 14
-    
     tips_raw = request.form.get('tips', '[]')
     try:
         tips = json.loads(tips_raw) if isinstance(tips_raw, str) else tips_raw
     except Exception:
         tips = []
-    
-    if isinstance(tips, list) and tips:
-        pdf.setFont("Helvetica", 10)
-        pdf.setFillColor(text_color)
-        for tip in tips[:8]:
-            tip_text = clean_section(str(tip))
-            tip_lines = wrap_text(tip_text, width - 140, 10)
-            
-            for i, line in enumerate(tip_lines[:3]):
-                prefix = "• " if i == 0 else "  "
-                pdf.drawString(70, y, f"{prefix}{line}")
-                y -= 11
-            y -= 3
+    tips = tips if isinstance(tips, list) else []
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.setFillColor(accent_color)
+    pdf.drawString(50, y, u"💡 Tips:")
+    y -= 16
+    pdf.setFont("Helvetica", 11)
+    pdf.setFillColor(text_color)
+    for tip in tips:
+        lines = wrap_text(str(tip), width - 120, 11)
+        for line in lines:
+            pdf.drawString(70, y, f"• {line}")
+            y -= 14
+    y -= 8
+
+    # Transport Options
+    transport_raw = request.form.get('transport', '[]')
+    try:
+        transport = json.loads(transport_raw) if isinstance(transport_raw, str) else transport_raw
+    except Exception:
+        transport = []
+    transport = transport if isinstance(transport, list) else []
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.setFillColor(accent_color)
+    pdf.drawString(50, y, u"🚗 Transport Options:")
+    y -= 16
+    pdf.setFont("Helvetica", 11)
+    pdf.setFillColor(text_color)
+    for option in transport:
+        lines = wrap_text(str(option), width - 120, 11)
+        for line in lines:
+            pdf.drawString(70, y, f"• {line}")
+            y -= 14
+    y -= 8
+
+    # Safety & Accessibility
+    tags_raw = request.form.get('tags', '[]')
+    try:
+        tags = json.loads(tags_raw) if isinstance(tags_raw, str) else tags_raw
+    except Exception:
+        tags = []
+    tags = tags if isinstance(tags, list) else []
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.setFillColor(accent_color)
+    pdf.drawString(50, y, u"🦺 Safety & Accessibility:")
+    y -= 16
+    pdf.setFont("Helvetica", 11)
+    pdf.setFillColor(text_color)
+    for tag in tags:
+        lines = wrap_text(str(tag), width - 120, 11)
+        for line in lines:
+            pdf.drawString(70, y, f"• {line}")
+            y -= 14
     y -= 10
-    
+
     # Transport Options
     pdf.setFont("Helvetica-Bold", 12)
     pdf.setFillColor(accent_color)
@@ -999,32 +1408,6 @@ def download_pdf():
             y -= 3
     y -= 10
     
-    # Safety & Accessibility
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.setFillColor(accent_color)
-    pdf.drawString(50, y, u"\U0001F6E1 Safety & Accessibility:")
-    y -= 14
-    
-    tags_raw = request.form.get('tags', '[]')
-    try:
-        tags = json.loads(tags_raw) if isinstance(tags_raw, str) else tags_raw
-    except Exception:
-        tags = []
-    
-    if isinstance(tags, list) and tags:
-        pdf.setFont("Helvetica", 10)
-        pdf.setFillColor(text_color)
-        for tag in tags[:8]:
-            tag_text = clean_section(str(tag))
-            tag_lines = wrap_text(tag_text, width - 140, 10)
-            
-            for i, line in enumerate(tag_lines[:2]):
-                prefix = "• " if i == 0 else "  "
-                pdf.drawString(70, y, f"{prefix}{line}")
-                y -= 11
-            y -= 3
-    y -= 15
-
     # Closing message
     closing = clean_section(request.form.get('closing', ''))
     if closing:
@@ -1049,47 +1432,44 @@ def download_pdf():
     pdf.setFillColor(header_color)
     pdf.drawString(40, y, u"\U0001F4CD Recommended Places to Visit:")
     y -= 20
-    
     if places and len(places) > 0 and any(str(place).strip() for place in places):
         for i, place in enumerate(places[:8]):
-            place_start_y = y
-            
+            # Prepare place text lines
             pdf.setFont("Helvetica", 11)
             pdf.setFillColor(text_color)
             place_text = f"{i+1}. {str(place)}"
-            
             place_lines = wrap_text(place_text, width - 120, 11)
-            for line in place_lines[:2]:
+            place_block_height = len(place_lines) * 13 + 35 + 20  # text + QR + spacing
+            # If not enough space for both text and QR code, move to next page
+            if y - place_block_height < 60:
+                pdf.showPage()
+                y = height - 40
+            place_start_y = y
+            # Draw place text
+            for line in place_lines:
                 pdf.drawString(60, y, line)
                 y -= 13
-            
             try:
                 from .maps_utils import google_maps_link
                 from .qr_utils import generate_qr_image_data
-                
                 link = google_maps_link(place, city_name)
                 qr_buf = generate_qr_image_data(link)
                 img_reader = ImageReader(qr_buf)
-                
                 qr_x = width - 70
                 qr_y = place_start_y - 35
                 pdf.drawImage(img_reader, qr_x, qr_y, width=35, height=35, preserveAspectRatio=True, mask='auto')
-                
                 pdf.setFont("Helvetica", 7)
                 pdf.setFillColor(accent_color)
                 pdf.drawString(qr_x + 8, qr_y - 10, "Scan")
-                
             except Exception as e:
                 print(f"QR code error for {place}: {e}")
-            
-            y -= 10
+            y -= 35  # QR code height
+            y -= 10  # Extra spacing after each place
     else:
         pdf.setFont("Helvetica", 11)
         pdf.setFillColor(text_color)
         pdf.drawString(60, y, "No recommended places available for this destination.")
         y -= 14
-    
-    y -= 20
 
     # Itinerary section
     if y < 200:
@@ -1137,12 +1517,30 @@ def download_pdf():
                         pdf.drawString(50, y, f"{period.capitalize()}:")
                         y -= 12
                         
-                        activity_text = clean_section(str(schedule[period]))
+                        # Enhanced cleaning for itinerary activities
+                        def clean_itinerary_activity(text):
+                            if not isinstance(text, str):
+                                return text
+                            import re
+                            text = text.replace('AI', '').replace('ai', '')
+                            text = re.sub(r'\*+', '', text)
+                            text = re.sub(r'#\s*', '', text)
+                            text = re.sub(r'\s+', ' ', text)
+                            text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+                            text = re.sub(r'([a-z])(\d)', r'\1 \2', text)
+                            text = re.sub(r'(\d)([a-z])', r'\1 \2', text)
+                            text = re.sub(r'([a-z])\s+([a-z]{1,2})\s+([a-z])', lambda m: m.group(1) + m.group(2) + m.group(3) if len(m.group(2)) <= 2 else m.group(0), text)
+                            text = re.sub(r'([\.,;:!?])([A-Za-z])', r'\1 \2', text)  # Ensure space after punctuation
+                            text = re.sub(r'([a-zA-Z])([\.,;:!?])', r'\1\2', text)  # Remove space before punctuation
+                            text = re.sub(r'\s+([\.,;:!?])', r'\1', text)  # Remove space before punctuation
+                            text = text.strip()
+                            return text
+                        activity_text = clean_itinerary_activity(str(schedule[period]))
                         activity_lines = wrap_text(activity_text, width - 140, 10)
                         
                         pdf.setFont("Helvetica", 10)
                         pdf.setFillColor(text_color)
-                        for line in activity_lines[:3]:
+                        for line in activity_lines[:6]:  # Allow more lines per period
                             if y < 60:
                                 pdf.showPage()
                                 y = height - 40
@@ -1186,6 +1584,17 @@ def download_pdf():
     if y < 120:
         pdf.showPage()
         y = height - 40
+    
+    # --- Add user prompt to cover page (before showPage) ---
+    if request.form.get('trip_description', ''):
+        pdf.setFont("Helvetica-Oblique", 11)
+        pdf.setFillColor(secondary_text)
+        prompt_text = request.form['trip_description']
+        prompt_lines = wrap_text(prompt_text, width - 120, 11)
+        y_prompt = 70  # Lower section of cover page
+        for line in prompt_lines:
+            pdf.drawCentredString(width // 2, y_prompt, line)
+            y_prompt -= 14
     
     pdf.setFont("Helvetica-Oblique", 13)
     pdf.setFillColor(accent_color)
